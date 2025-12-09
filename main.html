@@ -738,6 +738,29 @@
             background-color: rgba(255,255,255,0.2);
         }
 
+        /* Admin Button Styles */
+        .admin-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-btn:hover {
+            background-color: rgba(255,255,255,0.2);
+            transform: scale(1.1);
+        }
+
+        .admin-btn .material-symbols-outlined {
+            font-size: 24px;
+        }
+
         /* Progress and Analytics Styles */
         .analytics-section {
             background: white;
@@ -1278,6 +1301,11 @@
                 <button id="login-btn" class="login-btn" title="Đăng nhập">
                     <span class="material-symbols-outlined">login</span>
                 </button>
+                
+                <!-- THÊM NÚT QUẢN TRỊ (sẽ hiển thị tự động nếu là admin) -->
+                <button id="admin-btn" class="admin-btn" title="Trang quản trị" style="display: none;">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+                </button>
             </div>
         </div>
 
@@ -1781,6 +1809,10 @@
         let isInTestMode = false;
         let isAssignmentTest = false;
         
+        // BIẾN QUAN TRỌNG: Theo dõi user document real-time
+        let userUnsubscribe = null;
+        let userId = null;
+        
         // API Key đảo ngược
         const REVERSED_API_KEY = "4AE6KqeYCeSyAZI";
 
@@ -1792,6 +1824,14 @@
         // Check authentication state
         auth.onAuthStateChanged((user) => {
             if (user) {
+                userId = user.uid;
+                
+                // Kiểm tra và hiển thị nút quản trị
+                checkAndShowAdminButton(userId);
+                
+                // Theo dõi real-time thay đổi role của user
+                setupUserRoleListener(userId);
+                
                 // Check user role
                 db.collection('users').doc(user.uid).get().then((doc) => {
                     if (doc.exists) {
@@ -1822,6 +1862,73 @@
                         console.error('Lỗi đăng nhập ẩn danh:', error);
                     });
             }
+        });
+
+        // QUAN TRỌNG: Thiết lập real-time listener để theo dõi thay đổi role
+        function setupUserRoleListener(userId) {
+            // Hủy listener cũ nếu có
+            if (userUnsubscribe) {
+                userUnsubscribe();
+            }
+            
+            // Thiết lập listener mới
+            userUnsubscribe = db.collection('users').doc(userId)
+                .onSnapshot((doc) => {
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        updateAdminButton(userData.role === 'admin');
+                        
+                        // Cập nhật isTeacher
+                        isTeacher = userData.role === 'teacher';
+                        
+                        if (isTeacher) {
+                            document.getElementById('welcome-text').textContent = `Xin chào giáo viên ${userData.name || ''}!`;
+                        } else {
+                            document.getElementById('welcome-text').textContent = `Xin chào học sinh ${userData.name || ''}!`;
+                        }
+                    } else {
+                        // Nếu document không tồn tại, ẩn nút admin
+                        updateAdminButton(false);
+                    }
+                }, (error) => {
+                    console.error('Error listening to user role changes:', error);
+                });
+        }
+
+        // Cập nhật nút quản trị dựa trên role
+        function updateAdminButton(isAdmin) {
+            const adminBtn = document.getElementById('admin-btn');
+            
+            if (isAdmin) {
+                adminBtn.style.display = 'flex';
+                console.log('✅ User is admin, showing admin button');
+            } else {
+                adminBtn.style.display = 'none';
+                console.log('⛔ User is not admin, hiding admin button');
+            }
+        }
+
+        // Kiểm tra và hiển thị nút quản trị
+        function checkAndShowAdminButton(userId) {
+            const adminBtn = document.getElementById('admin-btn');
+            
+            db.collection('users').doc(userId).get().then((doc) => {
+                if (doc.exists && doc.data().role === 'admin') {
+                    adminBtn.style.display = 'flex';
+                    console.log('✅ User is admin, showing admin button');
+                } else {
+                    adminBtn.style.display = 'none';
+                    console.log('⛔ User is not admin, hiding admin button');
+                }
+            }).catch((error) => {
+                console.error('Error checking admin role:', error);
+                adminBtn.style.display = 'none';
+            });
+        }
+
+        // Nút quản trị - chuyển đến trang admin
+        document.getElementById('admin-btn').addEventListener('click', () => {
+            window.location.href = 'admin.html';
         });
 
         // Load user's class
@@ -4023,6 +4130,13 @@
                         }
                     }
                 });
+            }
+        });
+
+        // Clean up listener khi page unload
+        window.addEventListener('beforeunload', () => {
+            if (userUnsubscribe) {
+                userUnsubscribe();
             }
         });
     </script>
